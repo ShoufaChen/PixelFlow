@@ -1,13 +1,5 @@
 import os
 
-if int(os.environ.get("DEBUG", 0)) > 1:
-    os.popen(f"kill -9 $(lsof -t -i:{9502})")
-    import debugpy
-    # 5678 is the default attach port in the VS Code debug configurations. Unless a host and port are specified, host defaults to 127.0.0.1
-    debugpy.listen(("0.0.0.0", 9502))
-    print("Waiting for debugger attach")
-    debugpy.wait_for_client()
-
 import argparse
 import copy
 from collections import OrderedDict
@@ -63,8 +55,11 @@ def main(args):
     logger = setup_logger(args.output_dir, exp_name, rank, __name__)
 
     config = OmegaConf.load(args.config)
-    seed_everything(config.seed, deterministic_ops=False, allow_tf32=False)
-    logger.info(f"Rank: {rank}, Local Rank: {local_rank}, World Size: {world_size} Seed: {config.seed}")
+
+    rank_seed = config.seed * world_size + rank
+    seed_everything(rank_seed, deterministic_ops=False, allow_tf32=False)
+    logger.info(f"Rank: {rank}, Local Rank: {local_rank}, World Size: {world_size} Seed: {rank_seed}")
+
     # save args and config to output_dir
     with open(os.path.join(args.output_dir, "args.txt"), "w") as f:
         f.write(str(args))
@@ -91,7 +86,7 @@ def main(args):
 
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=config.train.lr, weight_decay=config.train.weight_decay)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config.train.lr, weight_decay=config.train.weight_decay)
     data_loader = build_imagenet_loader(config, noise_scheduler_copy)
 
     logger.info("***** Running training *****")
@@ -127,15 +122,16 @@ def main(args):
             if "padding_size" in batch and batch["padding_size"] is not None and batch["padding_size"] > 0:
                 loss_items = loss_items[:-1]
 
-            loss = loss.mean()
+            loss = loss_items.mean()
             loss.backward()
+            grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             update_ema(ema, model.module)
 
             if global_step % args.logging_steps == 0:
-                logger.info(f"Epoch: {epoch}, Step: {step}, Loss: {loss.item()}")
+                logger.info(f"Epoch: {epoch}, Step: {step}, Loss: {loss.item()}, Grad Norm: {grad_norm.item()}")
 
-            if global_step % args.checkpoint_steps == 0:
+            if global_step % args.checkpoint_steps == 0 and global_step > 0:
                 if rank == 0:
                     torch.save(
                         {
