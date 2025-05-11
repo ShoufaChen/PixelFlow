@@ -1,0 +1,38 @@
+/dataset/
+# output dir
+/output
+/ckpt_*
+/exp0*/
+
+*.diff
+
+# compilation and distribution
+__pycache__
+_ext
+*.pyc
+*.pyd
+*.so
+build/
+dist/
+wheels/
+*.egg-info/
+
+# pytorch/python/numpy formats
+*.pth
+*.pkl
+*.pt
+
+
+# Editor temporaries
+*.mp4
+*.swn
+*.swo
+*.swp
+*~
+
+# editor settings
+.idea
+.vscode
+
+# macOS system files
+.DS_Store

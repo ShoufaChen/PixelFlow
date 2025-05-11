@@ -87,7 +87,7 @@ def main(args):
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank], output_device=local_rank)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=config.train.lr, weight_decay=config.train.weight_decay)
-    data_loader = build_imagenet_loader(config, noise_scheduler_copy)
+    data_loader, sampler = build_imagenet_loader(config, noise_scheduler_copy)
 
     logger.info("***** Running training *****")
     global_step = 0
@@ -99,6 +99,7 @@ def main(args):
     ema.eval()
 
     for epoch in range(first_epoch, config.train.epochs):
+        sampler.set_epoch(epoch)
         for step, batch in enumerate(data_loader):
             optimizer.zero_grad()
             target = batch["target_values"].to(device)

@@ -155,4 +155,4 @@ def build_imagenet_loader(config, noise_scheduler_copy):
         num_workers=config.data.num_workers,
         drop_last=True,
     )
-    return loader
+    return loader, sampler
